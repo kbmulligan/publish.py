@@ -243,14 +243,16 @@ def do_update (posts):
     new_books = get_book_updates(posts)
     print('Book updates: {}'.format(new_books))
     update_books(new_books)
-
-    log("Last update run: " + time.asctime(time.gmtime()) + " GMT " )
+    
+    log_check()
 
 
 def no_update():
     print("Nothing new...")
-    log("Last checked: {}".format(time.asctime(time.gmtime())))
+    log_check()
 
+def log_check():
+    log("Last check: {} {}".format(time.asctime(time.gmtime()), "GMT"))
 
 def log (info, filename=LOG_FILENAME) :
     """ Writes "info" string to filename. Uses append mode for opening file.""" 
