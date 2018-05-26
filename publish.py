@@ -8,7 +8,7 @@ import datetime
 import time
 import sys
 import os
-import unittest
+import csv
 
 import twitter
 
@@ -19,6 +19,7 @@ WRITE_ONLY = 'w'
 READ_AND_WRITE_NEW_TRUNC = 'w+'
 
 CONTINUOUS = False
+VERBOSE = False
 
 seconds = 60            # seconds per interval (default=60)
 interval = 30           # seconds multiplier between tweet checks (default=30)
@@ -37,56 +38,87 @@ BOOK_FILENAME = '../public_html/books.txt'
 
 # the dict KEYS below are what the program is going to scan twitter for
 # the dict VALUES below are what the program is going write to the text file 
-act_pairs = {       '#reading':         'reading : ', 
-                    '#memorizing':      'memorizing : ',
-                    '#tryingout':       'trying out : ',
-                    '#thankfulfor':     'thankful for : ',
-                    '#learning':        'learning : ',
-                    '#listening to':    'listening to : ',
-                    '#researching':     'researching : '}
+act_pairs = {        '#reading':         'reading', 
+                     '#memorizing':      'memorizing',
+                     '#tryingout':       'trying out',
+                     '#thankfulfor':     'thankful for',
+                     '#learning':        'learning',
+                     '#listening to':    'listening to',
+                     '#researching':     'researching'}
 
 HASHTAGS = act_pairs.keys()
 
-ACTIVITY_SEPARATOR = ' : '
-BOOK_SEPARATOR = ' : '
+ACTIVITY_SEPARATOR = ';'
+BOOK_SEPARATOR = ';'
 
 # hashtag which indicates a book has been read
 BOOK_COMPLETE_COMMAND = '#finished'
-TITLE_AUTHOR_SEPARATOR = 'by'
+TITLE_AUTHOR_SEPARATOR = ' by '
+
+
+class Act:
+
+    def __init__(self, label, subject, started=None, ended=None):
+        self.label = label
+        self.subject = subject
+        self.started = datetime.datetime.now() 
+        self.hashtag = '#' + ''.join(label.split())
+
+    def __repr__(self):
+        return "{}: {} {}".format(hashtag, label, subject)
+
+    def end():
+        self.ended = datetime.datetime.now() 
+
+    def get_label():
+        return self.label
+
+    def get_subject():
+        return self.subject
+
+    def get_hashtag():
+        return self.hastag
 
 
 class Book:
     
-    def __init__(self, title, author, date_finished):
+    def __init__(self, title, author, date_finished=None):
         self.author = author
         self.title = title
         self.date_finished = date_finished 
 
+
+    def as_tuple(self):
+        return (self.title, self.author, self.date_finished)
     
+    def __repr__(self):
+        return "{} by {}".format(self.title, self.author)
+
+    def __eq__(self, other):
+        return self.title == other.title and self.author == other.author
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 
 def get_activity_updates (posts, activities) :
     """ Scan posts for activity updates and return pairs that qualify in a tuple. 
     """
     print('Checking for activity updates...')
-
-    updates = []
-
     print('Scanning {} most recent posts'.format(len(posts)))
     
+    updates = []
     for post in posts:
         unicode_post = post.text.encode(errors='replace')
-        for act in activities:
-            if act in unicode_post:
-                #print('...HAS ACTIVITY KEY...')
-                #print(act)
-                print(unicode_post)
+        for hashtag in activities:
+            if hashtag in unicode_post:
+                print(unicode_post)  
                 
-                new_activity = unicode_post.split(act)[-1].strip()
-                updates.append((act, new_activity))
+                # split string at 'act' and take end element
+                new_activity = unicode_post.split(hashtag)[-1].strip().strip('!?;.')
+                updates.append((hashtag, new_activity))
 
     return tuple(updates)
-    
-
 
 def update_activities (activities, filename=ACTIVITY_FILENAME) :
     """ Given activities, update filename with new activity pairs.
@@ -104,13 +136,11 @@ def update_activities (activities, filename=ACTIVITY_FILENAME) :
 
             # check each line for all activity keywords
             for i, line in enumerate(file_content):   
-                for act in activities:
-                    keyword, subject = act
-
+                for keyword, subject in activities:
                     # if the keyword is found, replace that line
-                    if act_pairs[keyword] in file_content[i]:
+                    if act_pairs[keyword] == file_content[i].split(ACTIVITY_SEPARATOR)[0]:
                         print('Overwriting a current activity line!')
-                        file_content[i] = '{}{}\n'.format(act_pairs[keyword], subject)
+                        file_content[i] = '{}{}{}\n'.format(act_pairs[keyword], ACTIVITY_SEPARATOR, subject)
             
         # write it all back to the file 
         with open(filename, READ_AND_WRITE_NEW_TRUNC) as f:
@@ -119,25 +149,18 @@ def update_activities (activities, filename=ACTIVITY_FILENAME) :
                 
     print('Activity updating complete!')
 
+
 def get_book_updates (posts):
     """ Scan posts for book updates and return any qualifying pairs as tuples. 
     """
     print('Checking for finished books...')
+    print('Scanning {} most recent posts'.format(len(posts)))
 
     updates = []
-
     for post in posts:
         if BOOK_COMPLETE_COMMAND in post.text:
-            
-            book_info = post.text.encode(errors='replace').split(BOOK_COMPLETE_COMMAND)[-1]
-            title_author = [x.strip() for x in book_info.strip().split(TITLE_AUTHOR_SEPARATOR)]
-            # title, author = tuple(title_author)
- 
-            if len(title_author) > 1:
-                (title, auth) = title_author
-                updates.append((title, auth))
-            else:
-                updates.append((title_author, "various"))
+            book = extract_book_from_string(post.text)
+            updates.append(book.as_tuple())
 
     return tuple(updates)
 
@@ -169,6 +192,19 @@ def update_books (updates, filename=BOOK_FILENAME) :
                 f.write(line) 
 
     print('Book updating complete!')
+
+def extract_book_from_string(text):
+    
+    # Break tweet at BOOK_COMPLETE_COMMAND and take everything afterward
+    book_info = text.encode(errors='replace').split(BOOK_COMPLETE_COMMAND)[-1]
+
+    # Remove trailing whitespace and split at TITLE_AUTHOR_SEPARATOR
+    title_and_author = [x.strip().strip('!.') for x in book_info.strip().split(TITLE_AUTHOR_SEPARATOR)]
+
+    title = title_and_author[0]             # first bit 
+    author = "".join(title_and_author[1:])       # the rest of it
+
+    return Book(title, author) 
 
 def book_is_unique (all_books, new_book):
     """ Returns True if new_book is not already in all_books.
@@ -235,20 +271,24 @@ def get_keys_and_user ():
 
 
 def do_update (posts):
-
+    # Check and update activities
     activity_updates = get_activity_updates(posts, HASHTAGS)
-    print('Activity updates: {}'.format(activity_updates))
     update_activities(activity_updates)
+    if VERBOSE:
+        print('Activity updates: {}'.format(activity_updates))
 
+    # Check and update books
     new_books = get_book_updates(posts)
-    print('Book updates: {}'.format(new_books))
     update_books(new_books)
+    if VERBOSE:
+        print('Book updates: {}'.format(new_books))
     
     log_check()
-
+    return
 
 def no_update():
-    print("Nothing new...")
+    if VERBOSE:
+        print("Nothing new...")
     log_check()
 
 def log_check():
@@ -285,7 +325,8 @@ if __name__ == '__main__':
             
     # check posts initially
     latest_posts = api.GetUserTimeline(screen_name=user, since_id=last_tweet_id)
-    print("Retrieved {} posts.".format(len(latest_posts)))
+    if VERBOSE:
+        print("Retrieved {} posts.".format(len(latest_posts)))
 
     if latest_posts:
         latest_tweet_id = get_latest_tweet_id(latest_posts)
@@ -298,8 +339,9 @@ if __name__ == '__main__':
         for (content, tid) in [(post.text.encode(errors='replace'), post.id) for post in latest_posts] :
             tweet_file.write('{} : {}\n'.format(tid, content))
 
-    print("Latest tweet id in file: {}".format(last_tweet_id))
-    print("Latest tweet id just retrieved: {}".format(latest_tweet_id))
+    if VERBOSE:
+        print("Latest tweet id in file: {}".format(last_tweet_id))
+        print("Latest tweet id just retrieved: {}".format(latest_tweet_id))
 
     with open(LATEST_TWEET_ID_FILENAME, READ_AND_WRITE) as tweet_file:
         tweet_file.write('{}\n'.format(latest_tweet_id))
@@ -319,6 +361,3 @@ if __name__ == '__main__':
 
         # wait
         time.sleep(seconds*interval)
-    """ This function retrieves access keys and username from system arguments, a specified file,
-        or a default file.
-    """
