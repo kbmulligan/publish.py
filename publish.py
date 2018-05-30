@@ -129,7 +129,8 @@ def get_activity_updates (posts, activities) :
 
         for hashtag in activities:
             if hashtag in post:
-                print(post)  
+                if VERBOSE:
+                    print(post)  
                 
                 # split string at 'act' and take end element
                 new_activity = post.split(hashtag)[-1].strip().strip(STRIP_CHARS)
@@ -216,8 +217,7 @@ def extract_book_from_string(text):
     # Break tweet at BOOK_COMPLETE_COMMAND and take everything afterward
     book_info = text.encode(errors='replace').split(BOOK_COMPLETE_COMMAND)[-1]
 
-    book_info_and_link = book_info.split("http://")
-
+    # Remove trailing links
     prefixes = ['http://', 'https://']
     if any(prefix in book_info for prefix in prefixes):
         for prefix in prefixes:
@@ -331,10 +331,15 @@ def log (info, filename=LOG_FILENAME) :
 def write_tweets_to_file(tweets, filename):
     """ Write all tweets to filename. """
 
-    # SET ONLY FOR EXTENDED MODE !!!
-    with open(filename, APPEND) as tweet_file :
-        for (tid, content) in [(post.id, post.full_text.encode(errors='replace')) for post in tweets]:
-            tweet_file.write('{} : {}\n'.format(tid, content))
+    if tweets:
+        if TWEET_MODE == EXTENDED:
+            with open(filename, READ_AND_WRITE_NEW_TRUNC) as tweet_file :
+                for (tid, content) in [(post.id, post.full_text.encode(errors='replace')) for post in tweets]:
+                    tweet_file.write('{} : {}\n'.format(tid, content))
+        else:
+            with open(filename, READ_AND_WRITE_NEW_TRUNC) as tweet_file :
+                for (tid, content) in [(post.id, post.full.encode(errors='replace')) for post in tweets]:
+                    tweet_file.write('{} : {}\n'.format(tid, content))
     
 
 def read_tweet_id(filename):
@@ -375,25 +380,24 @@ if __name__ == '__main__':
     last_tweet_id = read_tweet_id(LAST_TWEET_ID_FILENAME)
 
     # Check posts
-    raw_new_posts = api.GetUserTimeline(screen_name=user, 
+    new_posts = api.GetUserTimeline(screen_name=user, 
                                     since_id=last_tweet_id,
                                     include_rts=False,
                                     trim_user=True
                                     )
 
-    # Extract text
-    new_posts = [extract_full_text(post) for post in raw_new_posts]
 
     # Process if any 
     if new_posts:
-        newest_tweet_id = get_newest_tweet_id(raw_new_posts)
-        do_update(new_posts)
+        newest_tweet_id = get_newest_tweet_id(new_posts)
+        corrected_new_posts = [extract_full_text(post) for post in new_posts]
+        do_update(corrected_new_posts)
     else:
         newest_tweet_id = last_tweet_id
         no_update()
 
     # Record what was processed
-    write_tweets_to_file(raw_new_posts, LATEST_TWEETS_FILENAME)
+    write_tweets_to_file(new_posts, LATEST_TWEETS_FILENAME)
     write_tweet_id(newest_tweet_id, LAST_TWEET_ID_FILENAME)
 
     # REPORT ALL
