@@ -2,7 +2,7 @@ import publish
 
 class Post:
     def __init__(self, text):
-        self.text = text
+        self.full_text = text
 
 book_posts = [
     Post("I just #finished Where the Red Fern Grows by I. Forgot"),
@@ -82,16 +82,18 @@ def do_all_tests():
 
     print("Starting tests...")
     print("Using posts...")
-    print test_posts
+    # print test_posts
     #for post in test_posts:
     #    print post.text
 
     test_book_converter()
 
-    test_activity_scanner(test_posts)
-    test_book_scanner(test_posts)
+    raw_posts = [post.full_text for post in test_posts]    
 
-    print("All tests complete!")
+    test_activity_scanner(raw_posts)
+    test_book_scanner(raw_posts)
+
+    print("ALL TESTS COMPLETE!")
 
 
 if __name__ == "__main__":
